@@ -29,11 +29,11 @@ jobs:
           mkdir mod
           unzip JujutsuShenanigans.zip -d mod
 
-      - name: Check files
+      - name: Verify project
         run: |
-          ls -la mod
           test -f mod/build.gradle
           test -f mod/gradlew
+          test -f mod/src/main/resources/fabric.mod.json
 
       - name: Make Gradle executable
         run: chmod +x mod/gradlew
@@ -42,9 +42,48 @@ jobs:
         working-directory: mod
         run: ./gradlew build
 
-      - name: Upload compiled JAR
+      - name: Show compiled files
+        run: |
+          echo "=== BUILD OUTPUT ==="
+          ls -lah mod/build/libs/
+
+      - name: Calculate SHA256
+        run: |
+          echo "=== SHA256 CHECKSUMS ==="
+          sha256sum mod/build/libs/*.jar
+
+      - name: Inspect JAR contents
+        run: |
+          for file in mod/build/libs/*.jar; do
+            echo "================================"
+            echo "JAR: $file"
+            echo "================================"
+            unzip -l "$file"
+          done
+
+      - name: Install ClamAV
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clamav clamav-freshclam
+
+      - name: Update antivirus database
+        run: |
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam
+
+      - name: Scan compiled JAR files
+        run: |
+          echo "=== CLAMAV ANTIVIRUS SCAN ==="
+
+          clamscan \
+            --infected \
+            --recursive \
+            --exit-code=1 \
+            mod/build/libs/
+
+      - name: Upload verified JAR
         uses: actions/upload-artifact@v4
         with:
-          name: JujutsuShenanigans-Mod
+          name: JujutsuShenanigans-Verified
           path: mod/build/libs/*.jar
           if-no-files-found: error
